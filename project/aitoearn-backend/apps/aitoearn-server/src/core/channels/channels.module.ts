@@ -30,6 +30,7 @@ import { PublishTaskController } from './publish/tasks/publish-task.controller'
 import { PublishTaskService } from './publish/tasks/publish-task.service'
 import { RelayCallbackController } from './relay/relay-callback.controller'
 import { RelayClientService } from './relay/relay-client.service'
+import { RelayPublishMediaController } from './relay/relay-publish-media.controller'
 import { WorkService } from './works/work.service'
 import { WorksController } from './works/works.controller'
 
@@ -48,6 +49,7 @@ import { WorksController } from './works/works.controller'
     EngagementController,
     WorksController,
     RelayCallbackController,
+    RelayPublishMediaController,
   ],
   providers: [
     // Accounts

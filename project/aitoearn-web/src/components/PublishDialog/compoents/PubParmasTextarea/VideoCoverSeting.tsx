@@ -194,7 +194,9 @@ const VideoCoverSeting = memo(
         })
 
         // 上传封面到 OSS
-        const uploadCoverRes = await uploadToOss(cover.file)
+        const uploadCoverRes = await uploadToOss(cover.file, {
+          viaPublishMediaRelay: true,
+        })
         cover.ossUrl = getOssUrl(uploadCoverRes)
 
         onChoosed(cover)

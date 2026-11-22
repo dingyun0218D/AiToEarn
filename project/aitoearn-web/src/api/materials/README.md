@@ -33,7 +33,7 @@ OSS 上传、媒体库、草稿素材、素材组与公开素材查询。
 | `getMediaList`               | `GET media/list/{param}/{param}`          | 获取媒体资源列表                |
 | `getVideoThumbnail`          | `GET assets/thumbnail`                    | Get Video Thumbnail             |
 | `transferMedia`              | `POST media/transfer`                     | 媒体资源转移到其他分组          |
-| `uploadToOss`                | `前端封装`                                | 上传文件到OSS (前端直传 AWS S3) |
+| `uploadToOss`                | `前端封装`                                | 上传文件到OSS (前端直传 AWS S3)；`viaPublishMediaRelay` 时经本机代理上传官方云 publishMedia |
 
 ## 类型清单
 

@@ -82,6 +82,7 @@ export const usePublishManageUpload = create(
       uploadRuntimeMap.set(md5, runtime)
 
       runtime.promise = uploadToOss(file, {
+        viaPublishMediaRelay: true,
         signal: controller.signal,
         onProgress: (prog) => {
           runtime!.progress = prog

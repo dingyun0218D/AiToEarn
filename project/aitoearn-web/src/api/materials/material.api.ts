@@ -22,19 +22,28 @@ function getOriginalFileName(file: File | Blob) {
     : `file_${Date.now()}`
 }
 
-function getUploadRequestPath(publicUploadId?: string) {
+function getUploadRequestPath(publicUploadId?: string, viaPublishMediaRelay?: boolean) {
+  if (viaPublishMediaRelay)
+    return 'assets/publishMedia/uploadSign'
+
   return publicUploadId
     ? `assets/public/${encodeURIComponent(publicUploadId)}/uploadSign`
     : 'assets/uploadSign'
 }
 
-function getConfirmRequestPath(assetId: string, publicUploadId?: string) {
+function getConfirmRequestPath(assetId: string, publicUploadId?: string, viaPublishMediaRelay?: boolean) {
+  if (viaPublishMediaRelay)
+    return `assets/publishMedia/${assetId}/confirm`
+
   return publicUploadId
     ? `assets/public/${encodeURIComponent(publicUploadId)}/${assetId}/confirm`
     : `assets/${assetId}/confirm`
 }
 
-function getAssetType(fileName: string, contentType: string) {
+function getAssetType(fileName: string, contentType: string, viaPublishMediaRelay?: boolean) {
+  if (viaPublishMediaRelay)
+    return AssetType.PublishMedia
+
   if (contentType.startsWith('image/') || contentType.startsWith('video/'))
     return AssetType.UserMedia
 
@@ -64,14 +73,20 @@ function getUploadFileName(file: File | Blob, publicUploadId?: string) {
 }
 
 // 获取 R2 presigned post 数据
-async function getPresignedPostData(fileName: string, fileSize: number, contentType: string, publicUploadId?: string) {
+async function getPresignedPostData(
+  fileName: string,
+  fileSize: number,
+  contentType: string,
+  publicUploadId?: string,
+  viaPublishMediaRelay?: boolean,
+) {
   const res = await request<UploadSignData>({
-    url: getUploadRequestPath(publicUploadId),
+    url: getUploadRequestPath(publicUploadId, viaPublishMediaRelay),
     method: 'POST',
     data: {
       filename: fileName,
       size: fileSize,
-      type: getAssetType(fileName, contentType),
+      type: getAssetType(fileName, contentType, viaPublishMediaRelay),
     },
   })
 
@@ -81,9 +96,14 @@ async function getPresignedPostData(fileName: string, fileSize: number, contentT
   return res.data
 }
 
-async function confirmUpload(assetId: string, fallbackUrl: string, publicUploadId?: string) {
+async function confirmUpload(
+  assetId: string,
+  fallbackUrl: string,
+  publicUploadId?: string,
+  viaPublishMediaRelay?: boolean,
+) {
   const confirmResponse = await request<ConfirmUploadData>({
-    url: getConfirmRequestPath(assetId, publicUploadId),
+    url: getConfirmRequestPath(assetId, publicUploadId, viaPublishMediaRelay),
     method: 'POST',
     data: {
       id: assetId,
@@ -94,6 +114,86 @@ async function confirmUpload(assetId: string, fallbackUrl: string, publicUploadI
     throw new Error(confirmResponse?.message || '上传确认失败')
 
   return confirmResponse.data?.url || fallbackUrl
+}
+
+async function uploadViaPublishMediaRelay(
+  uploadFile: File | Blob,
+  fileName: string,
+  opts: UploadToOssOptions,
+): Promise<string> {
+  const formData = new FormData()
+  formData.append('file', uploadFile, fileName)
+
+  if (opts.onProgress) {
+    return new Promise<string>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable) {
+          const progress = Math.round((event.loaded / event.total) * 100)
+          opts.onProgress?.(progress)
+        }
+      })
+
+      const handleAbort = () => {
+        xhr.abort()
+        reject(new DOMException('上传失败: 用户取消', 'AbortError'))
+      }
+
+      opts.signal?.addEventListener('abort', handleAbort, { once: true })
+
+      xhr.addEventListener('load', () => {
+        opts.signal?.removeEventListener('abort', handleAbort)
+        if (xhr.status < 200 || xhr.status >= 300) {
+          reject(new Error(`上传失败: ${xhr.statusText || xhr.status}`))
+          return
+        }
+
+        try {
+          const payload = JSON.parse(xhr.responseText) as {
+            code?: number
+            message?: string
+            data?: { url?: string }
+          }
+          if (payload.code !== 0 || !payload.data?.url) {
+            reject(new Error(payload.message || '上传确认失败'))
+            return
+          }
+          resolve(payload.data.url)
+        }
+        catch {
+          reject(new Error('上传响应解析失败'))
+        }
+      })
+
+      xhr.addEventListener('error', () => {
+        opts.signal?.removeEventListener('abort', handleAbort)
+        reject(new Error('上传失败: 网络错误'))
+      })
+
+      const apiBase = (process.env.NEXT_PUBLIC_API_URL || '/api').replace(/\/?$/, '/')
+      xhr.open('POST', `${apiBase}assets/publishMedia/upload`)
+      const token = useUserStore.getState().token
+      if (token)
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+      const lng = useUserStore.getState().lang
+      if (lng)
+        xhr.setRequestHeader('Accept-Language', lng)
+      xhr.send(formData)
+    })
+  }
+
+  const res = await request<ConfirmUploadData>({
+    url: 'assets/publishMedia/upload',
+    method: 'POST',
+    data: formData,
+    signal: opts.signal,
+  })
+
+  if (!res || res.code !== 0 || !res.data?.url)
+    throw new Error(res?.message || '上传确认失败')
+
+  return res.data.url
 }
 
 /**
@@ -118,8 +218,19 @@ export async function uploadToOss(
     const fileSize = uploadFile.size
     const contentType = uploadFile.type || 'application/octet-stream'
 
+    // 发布素材：走本机服务端代传到官方云，避免浏览器直传官方 R2 的 CORS/网络失败
+    if (opts.viaPublishMediaRelay) {
+      return uploadViaPublishMediaRelay(uploadFile, fileName, opts)
+    }
+
     // 获取 presigned post 数据
-    const presignedData = await getPresignedPostData(fileName, fileSize, contentType, opts.publicUploadId)
+    const presignedData = await getPresignedPostData(
+      fileName,
+      fileSize,
+      contentType,
+      opts.publicUploadId,
+      opts.viaPublishMediaRelay,
+    )
 
     // R2 使用 PUT 请求直接上传到 uploadUrl，不需要 FormData
     const uploadUrl = presignedData.uploadUrl
@@ -150,7 +261,12 @@ export async function uploadToOss(
           if (xhr.status >= 200 && xhr.status < 300) {
             try {
               // 返回确认接口返回的最终访问URL
-              resolve(await confirmUpload(presignedData.id, presignedData.url, opts.publicUploadId))
+              resolve(await confirmUpload(
+                presignedData.id,
+                presignedData.url,
+                opts.publicUploadId,
+                opts.viaPublishMediaRelay,
+              ))
             }
             catch (confirmError) {
               console.error('确认上传失败:', confirmError)
@@ -191,7 +307,12 @@ export async function uploadToOss(
       }
 
       // 返回确认接口返回的最终访问URL
-      return confirmUpload(presignedData.id, presignedData.url, opts.publicUploadId)
+      return confirmUpload(
+        presignedData.id,
+        presignedData.url,
+        opts.publicUploadId,
+        opts.viaPublishMediaRelay,
+      )
     }
   }
   catch (error) {

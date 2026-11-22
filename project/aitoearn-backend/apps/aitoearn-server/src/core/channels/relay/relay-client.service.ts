@@ -40,26 +40,40 @@ export class RelayClientService {
     const filename = basename(new URL(localUrl).pathname)
 
     const fileResponse = await axios.get(localUrl, { responseType: 'arraybuffer' })
-    const contentType = fileResponse.headers['content-type'] || 'application/octet-stream'
-    const size = (fileResponse.data as ArrayBuffer).byteLength
+    const headerContentType = fileResponse.headers['content-type']
+    const contentType = typeof headerContentType === 'string' && headerContentType
+      ? headerContentType
+      : 'application/octet-stream'
+    const data = Buffer.from(fileResponse.data as ArrayBuffer)
 
-    const signResult = await this.post<UploadSignResult>('/assets/uploadSign', {
+    return this.uploadPublishMediaFile({
       filename,
+      contentType,
+      data,
+    })
+  }
+
+  async uploadPublishMediaFile(input: {
+    filename: string
+    contentType: string
+    data: Buffer
+  }): Promise<string> {
+    const signResult = await this.post<UploadSignResult>('/assets/uploadSign', {
+      filename: input.filename,
       type: AssetType.PublishMedia,
-      size,
+      size: input.data.byteLength,
     })
 
     if (!signResult?.uploadUrl) {
       throw new Error(`uploadSign returned no uploadUrl: ${JSON.stringify(signResult)}`)
     }
 
-    await axios.put(signResult.uploadUrl, fileResponse.data, {
-      headers: { 'Content-Type': contentType },
+    await axios.put(signResult.uploadUrl, input.data, {
+      headers: { 'Content-Type': input.contentType || 'application/octet-stream' },
     })
 
-    await this.post(`/assets/${signResult.id}/confirm`, {})
-
-    return signResult.url
+    const confirmResult = await this.post<{ url?: string }>(`/assets/${signResult.id}/confirm`, {})
+    return confirmResult?.url || signResult.url
   }
 
   private async request<T>(options: AxiosRequestConfig): Promise<T> {

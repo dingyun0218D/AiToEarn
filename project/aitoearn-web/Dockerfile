@@ -4,7 +4,7 @@ ENV NODE_ENV=production
 
 RUN apk add --no-cache libc6-compat
 
-RUN corepack enable pnpm && corepack prepare pnpm@latest --activate
+RUN npm install -g pnpm
 
 WORKDIR /app
 

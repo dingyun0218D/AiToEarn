@@ -21,6 +21,8 @@ export interface UploadToOssOptions {
   onProgress?: (prog: number) => void
   publicUploadId?: string
   signal?: AbortSignal
+  /** 经本机代理上传到官方云 publishMedia（发布弹窗用，避免 localhost URL） */
+  viaPublishMediaRelay?: boolean
 }
 
 /**

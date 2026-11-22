@@ -18,12 +18,13 @@
 - 根目录没有统一 package，不要在根目录随手执行 install/build。
 - backend 改动优先在 `project/aitoearn-backend` 用 `pnpm nx ...` 验证，并遵循 `project/aitoearn-backend/CLAUDE.md`。
 - web 改动在 `project/aitoearn-web` 验证，优先使用 `pnpm run type-check` 和 `pnpm build`。
+- Docker 本地部署按 `.agents/docker-deploy.md` 执行（仓库根目录 `docker compose`）。
 - 纯文档改动至少运行 `git diff --check`。
 
 ## Documentation Rules
 
 - 根 README 对外文档包含 `README.md`、`README_EN.md`、`README_JA.md`；涉及用户可见能力、安装、OpenClaw、MCP、Relay、API Key 或环境地址时默认三语同步。
-- Docker 部署说明涉及生产部署、环境变量或 `docker compose` 时，同步检查 `DOCKER_DEPLOYMENT_CN.md` 和 `DOCKER_DEPLOYMENT_EN.md`。
+- Docker 部署说明涉及生产部署、环境变量或 `docker compose` 时，同步检查官方文档 https://docs.aitoearn.ai/zh/use/installer 、https://docs.aitoearn.ai/en/use/installer ，以及 agent 操作手册 `.agents/docker-deploy.md`。
 - README 类改动保持最小可用改写，不要把参考文档整段复制进来。
 - 用户可见 README、skill、capability reference 只写当前能力与环境规则，不写 `dev`、测试环境、验证日期等来源说明。
 
